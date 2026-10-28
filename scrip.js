@@ -5,18 +5,17 @@
 //
 // Por defecto es un ensayo: solo marca en rojo a quién borraría, sin tocar nada.
 // Cuando te convenza la lista, pon VISTA_PREVIA = false y vuelve a pegarlo.
-
 (async () => {
   // ---------- Ajustes ----------
   const VISTA_PREVIA = true;
   const MAX_BORRADOS = 50; // tope por ejecución, para no ir a lo loco
-  const PALABRAS = /\b(IA|recruiter|recruiting|talent|headhunter|reclutad\w*|recursos humanos|rrhh|hr|seleccion|selección)\b/i;
+  const PALABRAS = /\b(recruiter|recruiting|talent|headhunter|reclutad\w*|recursos humanos|rrhh|hr|seleccion|selección)\b/i;
 
   // ---------- Utilidades ----------
   const dormir = (ms) => new Promise((ok) => setTimeout(ok, ms));
   const respirar = () => dormir(2500 + Math.random() * 2500); // pausa de persona, no de robot
 
-  // loopea cada 100 ms hasta que devuelva algo o timeout.
+  // Repite `buscar` cada 100 ms hasta que devuelva algo (o se agote el tiempo).
   const esperar = async (buscar, ms = 5000) => {
     for (let t = 0; t < ms; t += 100) {
       const res = buscar();
@@ -28,19 +27,17 @@
   const botonesConTexto = (texto) =>
     [...document.querySelectorAll('button')].filter((b) => b.textContent.trim() === texto);
 
-  // busca el boton .
-  const elementoConTexto = (texto) =>
-    [...document.querySelectorAll('body *')].find(
-      (e) => !e.children.length && e.textContent.trim() === texto && e.offsetParent
-    );
+  // El ítem del menú es un <div role="menuitem">, no un botón.
+  const opcionDeMenu = (texto) =>
+    [...document.querySelectorAll('[role=menuitem]')].find((e) => e.textContent.trim() === texto);
 
-  // censura 
+  // "Alejandra Merani" -> "Alejandra M*" (para no ir soltando nombres por la consola)
   const censurar = (nombre = '') => {
     const [pila, apellido] = nombre.split(/\s+/);
     return apellido ? `${pila} ${apellido[0]}*` : pila;
   };
 
-  // ---------- main ----------
+  // ---------- Lo que hace falta para cada contacto ----------
   const leerContacto = (tarjeta) => {
     const textos = tarjeta.querySelectorAll('a[href*="/in/"]:not([style]) p');
     return {
@@ -51,26 +48,25 @@
 
   // Menú "Más acciones" -> "Eliminar contacto" -> confirmación. Devuelve true si llegó hasta el final.
   const borrarContacto = async (tarjeta, nombre) => {
-    tarjeta.scrollIntoView({ block: 'center' });
+    // El menú se cierra solo si hay scroll en marcha, así que primero scroll y luego esperar a que pare.
+    tarjeta.scrollIntoView({ block: 'center', behavior: 'instant' });
+    await dormir(600);
     tarjeta.querySelector('button[aria-label^="Más acciones"]').click();
 
-    const opcionMenu = await esperar(() => elementoConTexto('Eliminar contacto'));
+    const opcionMenu = await esperar(() => opcionDeMenu('Eliminar contacto'));
     if (!opcionMenu) {
-      console.warn(
-        'El menú no apareció, me lo salto:', censurar(nombre),
-        document.querySelector('[role=menu],[role=listbox],[popover]')?.outerHTML.slice(0, 600)
-      );
+      console.warn('El menú no apareció, me lo salto:', censurar(nombre));
       document.body.click(); // cierra lo que haya quedado abierto
       return false;
     }
     opcionMenu.click();
 
-    // El modal repite el texto "Eliminar contacto" (título + botón)
-    const confirmar = await esperar(() =>
-      botonesConTexto('Eliminar contacto').find((b) => b.isConnected && !b.contains(opcionMenu))
-    );
+    // El modal tiene título "Eliminar contacto" (h2) y el botón con el mismo texto; solo busco el botón.
+    const confirmar = await esperar(() => botonesConTexto('Eliminar contacto')[0]);
     if (!confirmar) {
-      console.warn('La confirmación no apareció, me lo salto:', censurar(nombre));
+      const botones = [...document.querySelectorAll('[role=dialog] button, [role=alertdialog] button')].map((b) => b.textContent.trim());
+      console.warn('La confirmación no apareció, me lo salto:', censurar(nombre), 'botones del modal:', botones);
+      botonesConTexto('Cancelar')[0]?.click();
       return false;
     }
     confirmar.click();
